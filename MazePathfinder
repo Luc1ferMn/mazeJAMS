@@ -1,0 +1,406 @@
+package com.example.project1;
+
+import javafx.application.Application;
+/*import javafx.application.Platform;*/
+/*import javafx.stage.Screen;*/
+import javafx.geometry.*;
+import javafx.scene.Scene;
+import javafx.scene.control.*;
+import javafx.scene.layout.*;
+import javafx.scene.text.Font;
+import javafx.stage.Stage;
+import javafx.scene.input.KeyCode;
+import java.util.*;
+
+public class MazePathfinder extends Application {
+
+    // Game configuration variables
+    private static final int Height = 41;
+    private static final int Width = 41;
+/*    private static double mapSizeW = 0.9; // Width percentage of the screen
+    private static double mapSizeH = 0.9; // Height percentage of the screen*/
+
+    // Game board and player variables
+    private static char[][] maze = new char[Height][Width];
+    private static Label[][] cellLabels = new Label[Height][Width]; // Labels for each cell
+    private static int tX = 1; // Player's X position (start at (1,1))
+    private static int tY = 1; // Player's Y position
+    private static char wall = '█';
+    private static char path = ' ';
+    private static char spiller = '▣';
+    private static char goal = '⛾';
+    private static char solutionPath = '.'; // Character to mark the solution path
+
+    // UI components
+    private GridPane gridPane;
+
+    // To store the solution path
+    private static boolean[][] solutionVisited;
+
+    public static void main(String[] args) {
+        launch(args);
+    }
+
+    @Override
+    public void start(Stage primaryStage) {
+        // Create the main layout
+        BorderPane root = new BorderPane();
+
+        // Create the game grid pane
+        gridPane = new GridPane();
+        gridPane.setAlignment(Pos.CENTER);
+        gridPane.setGridLinesVisible(true);
+        gridPane.setHgap(0);
+        gridPane.setVgap(0);
+
+        // Initialize the cell labels
+        initializeGrid();
+
+        // Initialize the game board
+        generateMaze();
+
+        // Add the grid pane to the center of the BorderPane
+        ScrollPane scrollPane = new ScrollPane(gridPane);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setFitToHeight(true);
+        root.setCenter(scrollPane);
+
+        // Create the button panel
+        HBox buttonPanel = new HBox(10);
+        buttonPanel.setAlignment(Pos.CENTER);
+        buttonPanel.setPadding(new Insets(10));
+
+        // Create the movement buttons
+        Button venstre = new Button(" <- ");
+        Button op = new Button(" /\\ ");
+        Button ned = new Button(" \\/ ");
+        Button højre = new Button(" -> ");
+        Button newMap = new Button("Generate New Maze"); // New button to generate a new maze
+
+        int buttonW = 75;
+        int buttonH = 40;
+
+        venstre.setPrefSize(buttonW, buttonH);
+        op.setPrefSize(buttonW, buttonH);
+        ned.setPrefSize(buttonW, buttonH);
+        højre.setPrefSize(buttonW, buttonH);
+        newMap.setPrefSize(150, buttonH); // Adjust size as needed
+
+        // Add buttons to the panel
+        buttonPanel.getChildren().addAll(venstre, op, ned, højre, newMap);
+
+        // Add the button panel to the bottom of the BorderPane
+        root.setBottom(buttonPanel);
+
+        // Set up the scene and stage
+        Scene scene = new Scene(root);
+        primaryStage.setTitle("The Coffee Maze Game");
+        primaryStage.setScene(scene);
+        primaryStage.setMaximized(true);
+        primaryStage.show();
+
+        // Add action handlers for the buttons
+        højre.setOnAction(e -> moveRight());
+        venstre.setOnAction(e -> moveLeft());
+        op.setOnAction(e -> moveUp());
+        ned.setOnAction(e -> moveDown());
+        newMap.setOnAction(e -> {
+            restartGame();
+            generateMaze();
+        });
+
+        // Add key event handler for keyboard controls
+        scene.setOnKeyPressed(event -> {
+            KeyCode code = event.getCode();
+            if (code == KeyCode.W || code == KeyCode.UP) {
+                moveUp();
+            } else if (code == KeyCode.S || code == KeyCode.DOWN) {
+                moveDown();
+            } else if (code == KeyCode.A || code == KeyCode.LEFT) {
+                moveLeft();
+            } else if (code == KeyCode.D || code == KeyCode.RIGHT) {
+                moveRight();
+            }
+        });
+
+        // Ensure focus is on the scene to receive key events
+        root.requestFocus();
+    }
+
+    // Initialize the grid with labels
+    private void initializeGrid() {
+        gridPane.getChildren().clear(); // Clear existing cells
+        for (int y = 0; y < Height; y++) {
+            for (int x = 0; x < Width; x++) {
+                Label cellLabel = new Label();
+                cellLabel.setPrefSize(30, 30); // Adjust cell size
+                cellLabel.setAlignment(Pos.CENTER);
+                cellLabel.setFont(Font.font("Monospaced", 16));
+                cellLabels[y][x] = cellLabel;
+                gridPane.add(cellLabel, x, y);
+            }
+        }
+    }
+
+    // Update the grid based on the maze
+    private void updateGrid() {
+        for (int y = 0; y < Height; y++) {
+            for (int x = 0; x < Width; x++) {
+                Label cellLabel = cellLabels[y][x];
+                char cellValue = maze[y][x];
+
+                if (x == tX && y == tY) {
+                    cellLabel.setText(String.valueOf(spiller));
+                    cellLabel.setStyle("-fx-background-color: lightblue; -fx-border-color: black;");
+                } else if (cellValue == wall) {
+                    cellLabel.setText(String.valueOf(wall));
+                    cellLabel.setStyle("-fx-background-color: black; -fx-text-fill: black; -fx-border-color: black;");
+                } else if (cellValue == goal) {
+                    cellLabel.setText(String.valueOf(goal));
+                    cellLabel.setStyle("-fx-background-color: gold; -fx-border-color: black;");
+                } else if (cellValue == solutionPath) {
+                    cellLabel.setText(" ");
+                    cellLabel.setStyle("-fx-background-color: lightgreen; -fx-border-color: black;");
+                } else {
+                    cellLabel.setText(" ");
+                    cellLabel.setStyle("-fx-background-color: white; -fx-border-color: black;");
+                }
+            }
+        }
+    }
+
+    // Move the player to the right
+    private void moveRight() {
+        if (isValidMove(tX + 1, tY)) {
+            tX++;
+        }
+        updateGameState();
+    }
+
+    // Move the player to the left
+    private void moveLeft() {
+        if (isValidMove(tX - 1, tY)) {
+            tX--;
+        }
+        updateGameState();
+    }
+
+    // Move the player up
+    private void moveUp() {
+        if (isValidMove(tX, tY - 1)) {
+            tY--;
+        }
+        updateGameState();
+    }
+
+    // Move the player down
+    private void moveDown() {
+        if (isValidMove(tX, tY + 1)) {
+            tY++;
+        }
+        updateGameState();
+    }
+
+    // Update the game state and check for win/loss conditions
+    private void updateGameState() {
+        updateGrid();
+        if (maze[tY][tX] == goal) {
+            win();
+        }
+    }
+
+    // Generate the maze using Recursive Backtracker algorithm and find the solution path
+    private void generateMaze() {
+        // Initialize maze with walls
+        for (int y = 0; y < Height; y++) {
+            Arrays.fill(maze[y], wall);
+        }
+
+        // Starting point
+        int startX = 1;
+        int startY = 1;
+
+        maze[startY][startX] = path;
+
+        // Stack for backtracking
+        Stack<Cell> stack = new Stack<>();
+        stack.push(new Cell(startX, startY));
+
+        Random rand = new Random();
+
+        while (!stack.isEmpty()) {
+            Cell current = stack.peek();
+            List<Cell> neighbors = getUnvisitedNeighbors(current.x, current.y);
+
+            if (!neighbors.isEmpty()) {
+                // Choose a random neighbor
+                Cell neighbor = neighbors.get(rand.nextInt(neighbors.size()));
+
+                // Remove wall between current cell and chosen cell
+                int wallX = current.x + (neighbor.x - current.x) / 2;
+                int wallY = current.y + (neighbor.y - current.y) / 2;
+                maze[wallY][wallX] = path;
+                maze[neighbor.y][neighbor.x] = path;
+
+                // Push the neighbor to the stack
+                stack.push(neighbor);
+            } else {
+                // Backtrack
+                stack.pop();
+            }
+        }
+
+        // Place the goal at the bottom-right corner
+        maze[Height - 2][Width - 2] = goal;
+
+        // Reset player position
+        tX = 1;
+        tY = 1;
+
+        // Find the solution path using DFS
+        findSolutionPath();
+
+        updateGrid();
+    }
+
+    // Get unvisited neighbors (2 cells away)
+    private List<Cell> getUnvisitedNeighbors(int x, int y) {
+        List<Cell> neighbors = new ArrayList<>();
+
+        int[][] directions = {
+                {0, -2}, // Up
+                {0, 2},  // Down
+                {-2, 0}, // Left
+                {2, 0}   // Right
+        };
+
+        for (int[] dir : directions) {
+            int nx = x + dir[0];
+            int ny = y + dir[1];
+
+            if (nx > 0 && nx < Width - 1 && ny > 0 && ny < Height - 1 && maze[ny][nx] == wall) {
+                neighbors.add(new Cell(nx, ny));
+            }
+        }
+        return neighbors;
+    }
+
+    // Check if the move is valid
+    private boolean isValidMove(int x, int y) {
+        // Check bounds
+        if (x < 0 || x >= Width || y < 0 || y >= Height) {
+            return false;
+        }
+        // Check for wall
+        if (maze[y][x] == wall) {
+            return false;
+        }
+        return true;
+    }
+
+    // Display win message and ask to restart or exit
+    private void win() {
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("YOU WIN!");
+        alert.setHeaderText(null);
+        alert.setContentText("You found the coffee!\nDo you want to play again?");
+        ButtonType yesButton = new ButtonType("Yes");
+        ButtonType noButton = new ButtonType("No");
+        alert.getButtonTypes().setAll(yesButton, noButton);
+
+        alert.showAndWait().ifPresent(type -> {
+            if (type == yesButton) {
+                restartGame();
+                generateMaze();
+            } else {
+                System.exit(0);
+            }
+        });
+    }
+
+    // Restart the game
+    private void restartGame() {
+        // Reset the player's position
+        tX = 1;
+        tY = 1;
+    }
+
+    // Cell class for maze generation and pathfinding
+    class Cell {
+        int x, y;
+        Cell parent; // For reconstructing the path
+
+        Cell(int x, int y) {
+            this.x = x;
+            this.y = y;
+        }
+
+        Cell(int x, int y, Cell parent) {
+            this.x = x;
+            this.y = y;
+            this.parent = parent;
+        }
+    }
+
+    // Find the solution path using DFS
+    private void findSolutionPath() {
+        solutionVisited = new boolean[Height][Width];
+        Stack<Cell> stack = new Stack<>();
+        stack.push(new Cell(1, 1, null));
+        solutionVisited[1][1] = true;
+
+        while (!stack.isEmpty()) {
+            Cell current = stack.pop();
+
+            if (maze[current.y][current.x] == goal) {
+                // Reached the goal, reconstruct the path
+                reconstructPath(current);
+                return;
+            }
+
+            List<Cell> neighbors = getValidNeighbors(current.x, current.y, current);
+            for (Cell neighbor : neighbors) {
+                if (!solutionVisited[neighbor.y][neighbor.x]) {
+                    solutionVisited[neighbor.y][neighbor.x] = true;
+                    stack.push(neighbor);
+                }
+            }
+        }
+    }
+
+    // Get valid neighbors for pathfinding (adjacent cells)
+    private List<Cell> getValidNeighbors(int x, int y, Cell parent) {
+        List<Cell> neighbors = new ArrayList<>();
+
+        int[][] directions = {
+                {0, -1}, // Up
+                {0, 1},  // Down
+                {-1, 0}, // Left
+                {1, 0}   // Right
+        };
+
+        for (int[] dir : directions) {
+            int nx = x + dir[0];
+            int ny = y + dir[1];
+
+            if (isValidPosition(nx, ny) && (maze[ny][nx] == path || maze[ny][nx] == goal) && !solutionVisited[ny][nx]) {
+                neighbors.add(new Cell(nx, ny, parent));
+            }
+        }
+        return neighbors;
+    }
+
+    private boolean isValidPosition(int x, int y) {
+        return x >= 0 && x < Width && y >= 0 && y < Height;
+    }
+
+    // Reconstruct the path from the goal to the start
+    private void reconstructPath(Cell current) {
+        while (current.parent != null) {
+            if (maze[current.y][current.x] != goal) {
+                maze[current.y][current.x] = solutionPath;
+            }
+            current = current.parent;
+        }
+    }
+}
